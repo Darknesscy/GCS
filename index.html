@@ -8,11 +8,115 @@
     <title>Global Conflict Sphere</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+      @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700;800&display=swap');
+      
       body {
         background-color: #000;
         color: #fff;
         overflow: hidden;
+        font-family: 'JetBrains+Mono', monospace;
+        image-rendering: pixelated;
       }
+
+      /* Advanced Holographic Overlay */
+      .hologram-overlay {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 100;
+        background: 
+          radial-gradient(circle at center, transparent 20%, rgba(0, 5, 10, 0.6) 100%),
+          linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%),
+          linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
+        background-size: 100% 100%, 100% 2px, 2px 100%;
+        opacity: 0.9;
+        mix-blend-mode: color-dodge;
+      }
+
+      /* CRT Scanline Effect */
+      body::before {
+        content: " ";
+        display: block;
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        right: 0;
+        background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+        z-index: 150;
+        background-size: 100% 4px, 4px 100%;
+        pointer-events: none;
+      }
+
+      /* Screen Flicker & Glitch */
+      @keyframes flicker {
+        0% { opacity: 0.99; filter: contrast(100%); }
+        2% { opacity: 0.95; filter: contrast(120%); }
+        4% { opacity: 1; filter: contrast(100%); }
+        50% { opacity: 0.98; }
+        98% { opacity: 1; }
+        100% { opacity: 0.99; }
+      }
+
+      .flicker-effect {
+        animation: flicker 10s infinite linear;
+      }
+
+      /* Tactical HUD Corners with Pulse */
+      @keyframes pulse-border {
+        0%, 100% { border-color: rgba(6, 182, 212, 0.3); box-shadow: 0 0 5px rgba(6, 182, 212, 0.1); }
+        50% { border-color: rgba(6, 182, 212, 0.8); box-shadow: 0 0 20px rgba(6, 182, 212, 0.4); }
+      }
+
+      .hud-corner {
+        position: fixed;
+        width: 80px;
+        height: 80px;
+        border: 2px solid rgba(6, 182, 212, 0.4);
+        pointer-events: none;
+        z-index: 90;
+        animation: pulse-border 5s infinite ease-in-out;
+      }
+      .corner-tl { top: 20px; left: 20px; border-right: 0; border-bottom: 0; border-top-left-radius: 4px; }
+      .corner-tr { top: 20px; right: 20px; border-left: 0; border-bottom: 0; border-top-right-radius: 4px; }
+      .corner-bl { bottom: 20px; left: 20px; border-right: 0; border-top: 0; border-bottom-left-radius: 4px; }
+      .corner-br { bottom: 20px; right: 20px; border-left: 0; border-top: 0; border-bottom-right-radius: 4px; }
+
+      /* Visual Noise Overlay */
+      .noise-bg {
+        position: fixed;
+        inset: 0;
+        opacity: 0.04;
+        z-index: 95;
+        pointer-events: none;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+      }
+
+      /* Scanning Text */
+      .scan-text {
+        position: fixed;
+        bottom: 50px;
+        left: 20px;
+        color: rgba(6, 182, 212, 0.5);
+        font-size: 9px;
+        letter-spacing: 0.4em;
+        text-transform: uppercase;
+        z-index: 110;
+        font-weight: 800;
+        pointer-events: none;
+        text-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
+      }
+      .scan-text::after {
+        content: '...';
+        animation: dots 2s steps(4, end) infinite;
+      }
+      @keyframes dots { 0%, 20% { content: ''; } 40% { content: '.'; } 60% { content: '..'; } 80% { content: '...'; } }
+
+      /* Global Monospaced Scrollbar */
+      ::-webkit-scrollbar { width: 4px; }
+      ::-webkit-scrollbar-track { background: rgba(0,0,0,0.5); }
+      ::-webkit-scrollbar-thumb { background: #06b6d4; border-radius: 2px; }
+      ::-webkit-scrollbar-thumb:hover { background: #0891b2; }
     </style>
   <script type="importmap">
 {
@@ -27,7 +131,17 @@
 </script>
 </head>
   <body>
-    <div id="root"></div>
+    <div id="root" class="flicker-effect"></div>
+    <div class="hologram-overlay"></div>
+    <div class="noise-bg"></div>
+    
+    <div class="hud-corner corner-tl"></div>
+    <div class="hud-corner corner-tr"></div>
+    <div class="hud-corner corner-bl"></div>
+    <div class="hud-corner corner-br"></div>
+    
+    <div class="scan-text">Satellite Link: Uplink Stable [v9.2]</div>
+
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>

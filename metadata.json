@@ -1,5 +1,8 @@
 {
   "name": "Global Conflict Sphere",
   "description": "An interactive 3D holographic globe that visualizes real-time global conflict and crisis zones, with data enhanced by the Gemini API. Users can explore various categories of issues, from environmental to geopolitical.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ]
 }
