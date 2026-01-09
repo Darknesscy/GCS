@@ -81,26 +81,6 @@ const createHexTexture = () => {
 
 // --- Utils ---
 
-const getSunPosition = (date: Date) => {
-  const d = date instanceof Date && !isNaN(date.getTime()) ? date : new Date();
-  const day = new Date(Date.UTC(d.getUTCFullYear(), 0, 0));
-  const diff = d.getTime() - day.getTime();
-  const dayOfYear = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const declination = 23.44 * Math.sin((360/365) * (dayOfYear - 81) * (Math.PI/180));
-  const utcHours = d.getUTCHours() + d.getUTCMinutes() / 60;
-  return { lat: declination, lon: (12 - utcHours) * 15 };
-};
-
-const getMoonPosition = (date: Date) => {
-   const d = date instanceof Date && !isNaN(date.getTime()) ? date : new Date();
-   const daysSince = (d.getTime() - new Date('2000-01-06T18:14:00Z').getTime()) / (1000 * 60 * 60 * 24);
-   const phase = (daysSince % 29.53059) / 29.53059;
-   const sunPos = getSunPosition(d);
-   let moonLon = sunPos.lon - (phase * 360);
-   while(moonLon > 180) moonLon -= 360; while(moonLon < -180) moonLon += 360;
-   return { lat: sunPos.lat * -0.5 + 5 * Math.sin(phase * Math.PI * 2), lon: moonLon };
-};
-
 const getVectorFromLatLon = (lat: number, lon: number, radius: number) => {
   const phi = (90 - lat) * (Math.PI / 180);
   const theta = (lon + 180) * (Math.PI / 180);
@@ -118,14 +98,13 @@ const glowFragmentShader = `uniform vec3 color; uniform float time; uniform floa
 const scannerVertexShader = `varying vec3 vPos; void main() { vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 const scannerFragmentShader = `uniform float scanHeight; uniform vec3 color; varying vec3 vPos; void main() { float dist = abs(vPos.y - scanHeight); float intensity = smoothstep(0.5, 0.0, dist); float grid = sin(vPos.x * 20.0) * sin(vPos.z * 20.0); intensity *= (0.5 + 0.5 * grid); if (intensity < 0.01) discard; gl_FragColor = vec4(color, intensity * 0.4); }`;
 
-const Globe: React.FC<GlobeProps> = ({ categories, activeCategories, onMarkerClick, rotationSpeed, intensityFilter, globeTarget, weatherData, showWeather, assets = [], year }) => {
+const Globe: React.FC<GlobeProps> = ({ categories, activeCategories, onMarkerClick, rotationSpeed, intensityFilter, globeTarget, weatherData, showWeather, assets = [] }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const globeGroupRef = useRef<THREE.Group | null>(null);
   const markersRef = useRef<any[]>([]);
   const hoveredMarkerRef = useRef<string | null>(null);
   const resourcesRef = useRef<Set<any>>(new Set());
 
-  // Textures memoized to prevent re-creation
   const textures = useMemo(() => ({
     hex: createHexTexture(),
     clouds: createCloudTexture(),
@@ -135,10 +114,9 @@ const Globe: React.FC<GlobeProps> = ({ categories, activeCategories, onMarkerCli
   }), []);
 
   useEffect(() => {
-    if (!mountRef.current) return;
+    if (!mountRef.current || !categories) return;
     const currentMount = mountRef.current;
     
-    // Cleanup any existing canvases
     while(currentMount.firstChild) currentMount.removeChild(currentMount.firstChild);
 
     let renderer: THREE.WebGLRenderer | null = null;
@@ -146,8 +124,7 @@ const Globe: React.FC<GlobeProps> = ({ categories, activeCategories, onMarkerCli
         renderer = new THREE.WebGLRenderer({ 
             antialias: true, 
             alpha: true, 
-            powerPreference: "high-performance",
-            failIfMajorPerformanceCaveat: false 
+            powerPreference: "high-performance"
         });
     } catch (e) {
         console.error("WebGL Initialization failed", e);
@@ -166,7 +143,6 @@ const Globe: React.FC<GlobeProps> = ({ categories, activeCategories, onMarkerCli
     globeGroupRef.current = globeGroup;
     scene.add(globeGroup);
 
-    // Track resources for disposal
     const track = (res: any) => { if (res) resourcesRef.current.add(res); return res; };
 
     // Starfield
@@ -200,7 +176,6 @@ const Globe: React.FC<GlobeProps> = ({ categories, activeCategories, onMarkerCli
 
     const ambient = track(new THREE.AmbientLight(0x404040, 0.5)); scene.add(ambient);
     const sunLight = track(new THREE.DirectionalLight(0xffffff, 2.5)); globeGroup.add(sunLight);
-    const sunMesh = new THREE.Mesh(track(new THREE.SphereGeometry(0.8, 16, 16)), track(new THREE.MeshBasicMaterial({ color: 0xffaa00 }))); globeGroup.add(sunMesh);
 
     // Satellites
     const satGeo = track(new THREE.BoxGeometry(0.05, 0.05, 0.1));
@@ -214,35 +189,30 @@ const Globe: React.FC<GlobeProps> = ({ categories, activeCategories, onMarkerCli
     // Markers
     markersRef.current = [];
     const markerPlane = track(new THREE.PlaneGeometry(0.6, 0.6));
-    const arcPoints: THREE.Vector3[] = [];
 
-    // Corrected casting of cat to Category to fix property access errors
-    Object.entries(categories).forEach(([key, rawCat]) => {
-      const cat = rawCat as Category;
-      const color = key === 'phenomena' ? 0xffffff : cat.color;
-      cat.zones.forEach((zone, idx) => {
-        const pos = getVectorFromLatLon(zone.lat, zone.lon, 5.1);
-        if (activeCategories[key] && zone.intensity >= intensityFilter) arcPoints.push(pos);
+    // DEFENSIVE CHECK: Ensure categories is an object
+    if (categories && typeof categories === 'object') {
+      Object.entries(categories).forEach(([key, rawCat]) => {
+        const cat = rawCat as Category;
+        // DEFENSIVE CHECK: Ensure category and zones array exist
+        if (!cat || !cat.zones || !Array.isArray(cat.zones)) return;
 
-        const g = new THREE.Group(); g.position.copy(pos); g.lookAt(0,0,0);
-        const glow = track(new THREE.ShaderMaterial({
-            uniforms: { color: { value: new THREE.Color(color) }, time: { value: 0 }, hover: { value: 0 } },
-            vertexShader: glowVertexShader, fragmentShader: glowFragmentShader, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
-        }));
-        const m = new THREE.Mesh(markerPlane, glow); m.position.z = 0.05; g.add(m);
-        globeGroup.add(g);
-        markersRef.current.push({ group: g, glowMat: glow, zone, category: key, id: `${key}-${idx}` });
+        const color = key === 'phenomena' ? 0xffffff : cat.color;
+        cat.zones.forEach((zone, idx) => {
+          if (!zone) return;
+          const pos = getVectorFromLatLon(zone.lat, zone.lon, 5.1);
+          const g = new THREE.Group(); g.position.copy(pos); g.lookAt(0,0,0);
+          const glow = track(new THREE.ShaderMaterial({
+              uniforms: { color: { value: new THREE.Color(color) }, time: { value: 0 }, hover: { value: 0 } },
+              vertexShader: glowVertexShader, fragmentShader: glowFragmentShader, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+          }));
+          const m = new THREE.Mesh(markerPlane, glow); m.position.z = 0.05; g.add(m);
+          globeGroup.add(g);
+          markersRef.current.push({ group: g, glowMat: glow, zone, category: key, id: `${key}-${idx}` });
+        });
       });
-    });
+    }
 
-    // Handle Context Loss
-    const handleContextLost = (event: Event) => {
-        event.preventDefault();
-        console.warn("WebGL Context Lost. Resources cleared.");
-    };
-    renderer.domElement.addEventListener('webglcontextlost', handleContextLost, false);
-
-    // Animation Loop
     const physics = { isDragging: false, velocityX: 0, velocityY: 0, zoom: 17, lastX: 0, lastY: 0 };
     let frameId: number;
     let scanY = 0; let scanDir = 1;
@@ -281,7 +251,6 @@ const Globe: React.FC<GlobeProps> = ({ categories, activeCategories, onMarkerCli
     };
     animate();
 
-    // Event Handlers
     const onMouseDown = (e: MouseEvent) => { physics.isDragging = true; physics.lastX = e.clientX; physics.lastY = e.clientY; };
     const onMouseMove = (e: MouseEvent) => {
         if (physics.isDragging) {
@@ -294,7 +263,7 @@ const Globe: React.FC<GlobeProps> = ({ categories, activeCategories, onMarkerCli
             const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
             const intersects = raycaster.intersectObjects(markersRef.current.filter(m => m.group.visible).map(m => m.group), true);
             if (intersects.length > 0) {
-                let hit = intersects[0].object; while(hit.parent && !hit.userData.id) { if (markersRef.current.find(m => m.group === hit)) break; hit = hit.parent; }
+                let hit = intersects[0].object; while(hit.parent && !hit.userData?.id) { if (markersRef.current.find(m => m.group === hit)) break; hit = hit.parent; }
                 const data = markersRef.current.find(m => m.group === hit);
                 if (data && hoveredMarkerRef.current !== data.id) { hoveredMarkerRef.current = data.id; playHoverSound(); currentMount.style.cursor = 'pointer'; }
             } else { hoveredMarkerRef.current = null; currentMount.style.cursor = 'grab'; }
@@ -330,24 +299,21 @@ const Globe: React.FC<GlobeProps> = ({ categories, activeCategories, onMarkerCli
         currentMount.removeEventListener('click', onClick);
         
         if (renderer) {
-            renderer.domElement.removeEventListener('webglcontextlost', handleContextLost);
             renderer.dispose();
             if (currentMount.contains(renderer.domElement)) currentMount.removeChild(renderer.domElement);
         }
         
         resourcesRef.current.forEach(res => {
             if (res.dispose) res.dispose();
-            if (res.type === 'Mesh' || res.type === 'Points' || res.type === 'Line') {
-                if (res.geometry) res.geometry.dispose();
-                if (res.material) {
-                    if (Array.isArray(res.material)) res.material.forEach((m: any) => m.dispose());
-                    else res.material.dispose();
-                }
+            if (res.geometry) res.geometry.dispose();
+            if (res.material) {
+                if (Array.isArray(res.material)) res.material.forEach((m: any) => m.dispose());
+                else res.material.dispose();
             }
         });
         resourcesRef.current.clear();
     };
-  }, [categories, activeCategories, intensityFilter, textures, rotationSpeed]);
+  }, [categories, activeCategories, intensityFilter, textures, rotationSpeed, onMarkerClick]);
 
   return <div ref={mountRef} className="w-full h-full cursor-grab active:cursor-grabbing" />;
 };
